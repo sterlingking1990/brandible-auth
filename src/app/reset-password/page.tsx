@@ -16,6 +16,7 @@ export default function ResetPassword() {
     // Check for access_token in URL fragment
     const hash = window.location.hash
     const params = new URLSearchParams(hash.substring(1))
+    console.log('URL Params:', Array.from(params.entries()))
     const accessToken = params.get('access_token')
 
     if (accessToken) {
