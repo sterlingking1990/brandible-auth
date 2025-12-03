@@ -13,35 +13,46 @@ export default function ResetPassword() {
   const router = useRouter()
 
   useEffect(() => {
+    let mounted = true
+    // STRATEGY 1: Immediate Check
+    // We check immediately if the URL hash has already been processed into a session.
+    // This handles the "Race Condition" where the login happens before the component mounts.
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (mounted && session) {
+        setLoading(false)
+      }
+    }
+    checkSession()
     // When the component mounts, Supabase client automatically handles the session
     // from the URL fragment. We listen for the 'SIGNED_IN' event to know when
     // the user is authenticated and ready to reset their password.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
+      if (mounted && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session) {
         setLoading(false)
-        // Once signed in, we no longer need to listen for changes.
-        subscription?.unsubscribe()
       }
     })
 
     // Add a timeout to handle cases where the token is invalid or expired,
     // and the SIGNED_IN event is never fired.
-    const timer = setTimeout(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
+    const timer = setTimeout(async() => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (mounted) {
         if (!session) {
-          setError(
-            'Invalid or expired password reset link. Please request a new one.'
-          )
-          setLoading(false)
+          setError('Invalid or expired password reset link. Please request a new one.')
         }
-      })
+        // Whether we have a session or not, we MUST stop the loading state now.
+        setLoading(false)
+      }
     }, 5000) // 5-second timeout for robustness
 
     // Cleanup function to unsubscribe from the listener and clear the timeout
     // when the component unmounts.
     return () => {
+      mounted = false
       subscription?.unsubscribe()
       clearTimeout(timer)
     }
