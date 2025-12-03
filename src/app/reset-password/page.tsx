@@ -13,26 +13,37 @@ export default function ResetPassword() {
   const router = useRouter()
 
   useEffect(() => {
-    // Check for access_token in URL fragment
-    const hash = window.location.hash
-    const params = new URLSearchParams(hash.substring(1))
-    console.log('URL Params:', Array.from(params.entries()))
-    const accessToken = params.get('access_token')
+    // When the component mounts, Supabase client automatically handles the session
+    // from the URL fragment. We listen for the 'SIGNED_IN' event to know when
+    // the user is authenticated and ready to reset their password.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setLoading(false)
+        // Once signed in, we no longer need to listen for changes.
+        subscription?.unsubscribe()
+      }
+    })
 
-    if (accessToken) {
-      // Supabase automatically uses the access_token from the URL to set the session
-      // if it's present. We just need to ensure the user is logged in.
+    // Add a timeout to handle cases where the token is invalid or expired,
+    // and the SIGNED_IN event is never fired.
+    const timer = setTimeout(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          setLoading(false)
-        } else {
-          setError('Invalid or expired password reset link. Please try again.')
+        if (!session) {
+          setError(
+            'Invalid or expired password reset link. Please request a new one.'
+          )
           setLoading(false)
         }
       })
-    } else {
-      setError('Invalid password reset link. No access token found.')
-      setLoading(false)
+    }, 5000) // 5-second timeout for robustness
+
+    // Cleanup function to unsubscribe from the listener and clear the timeout
+    // when the component unmounts.
+    return () => {
+      subscription?.unsubscribe()
+      clearTimeout(timer)
     }
   }, [])
 
